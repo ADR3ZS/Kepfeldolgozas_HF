@@ -28,9 +28,9 @@ iterationsPerEpoch = floor(numTrainingSamples / miniBatchSize);
 drasticValFreq = iterationsPerEpoch * 1; 
 
 options = trainingOptions("adam", ...
-    'MaxEpochs', 2, ... % Restored for production training
+    'MaxEpochs', 1, ... % Restored for production training
     'MiniBatchSize', miniBatchSize, ... % Small batch size for Mask R-CNN
-    'InitialLearnRate', 1e-4, ...
+    'InitialLearnRate', 1e-5, ...
     'ResetInputNormalization', false, ... % Required for Mask R-CNN training
     'ValidationData', dsTest, ...
     'ValidationFrequency', drasticValFreq, ...
@@ -49,8 +49,8 @@ end
 
 % Resume training using the existing model and default region proposal values
 trainedMaskRCNN_final = trainMaskRCNN(dsTrain, trainedMaskRCNN, options, ...
-    'NumStrongestRegions', 400, ...
-    'NumRegionsToSample', 64);
+    'NumStrongestRegions', 200, ...
+    'NumRegionsToSample', 32);
 
 % 5. Save Final Model
 save('trainedMaskRCNN_final.mat', 'trainedMaskRCNN_final');
@@ -71,9 +71,15 @@ if isempty(bboxes) || size(bboxes, 1) == 0
     imshow(img); % Display the raw image
 else
     fprintf('%d objects detected. Displaying annotations...\n', size(bboxes, 1));
+    
+    % CRITICAL FIX: Convert 'single' masks to 'logical' (binary) masks 
+    % Thresholding at 0.5 safely converts probabilities to binary true/false
+    masks = logical(masks > 0.5); 
+    
     % Overlay instance masks on the image
     imOverlay = insertObjectMask(img, masks);
     imshow(imOverlay);
+    
     % Draw bounding boxes and labels
     showShape("rectangle", bboxes, "Label", labels, "Color", "red");
 end
