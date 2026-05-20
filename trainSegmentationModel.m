@@ -62,8 +62,8 @@ fprintf('Training complete. Displaying a test sample prediction...\n');
 data = read(dsTest); 
 img = data{1};
 
-% Perform instance segmentation using the final model
-[bboxes, scores, labels, masks] = segmentObjects(trainedMaskRCNN_final, img);
+% Perform instance segmentation (CORRECTED OUTPUT ORDER)
+[masks, labels, scores, bboxes] = segmentObjects(trainedMaskRCNN_final, img);
 
 % Safely check if any objects were detected before drawing
 if isempty(bboxes) || size(bboxes, 1) == 0
@@ -71,10 +71,6 @@ if isempty(bboxes) || size(bboxes, 1) == 0
     imshow(img); % Display the raw image
 else
     fprintf('%d objects detected. Displaying annotations...\n', size(bboxes, 1));
-    
-    % CRITICAL FIX: Convert 'single' masks to 'logical' (binary) masks 
-    % Thresholding at 0.5 safely converts probabilities to binary true/false
-    masks = logical(masks > 0.5); 
     
     % Overlay instance masks on the image
     imOverlay = insertObjectMask(img, masks);
