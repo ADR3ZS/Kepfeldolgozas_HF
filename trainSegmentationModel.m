@@ -2,7 +2,7 @@
 % Script to train Mask R-CNN for Porcine Instance Segmentation.
 
 % 1. Setup Datastores
-[dsTrain, dsTest] = setupSegmentationDatastores();
+[dsTrain, dsTest, numTrainingSamples] = setupSegmentationDatastores();
 
 % 1.1 Downsample Data
 targetSize = [224, 224];
@@ -24,12 +24,11 @@ maskrcnnObj = maskrcnn("resnet50-coco", classNames, anchorBoxes);
 
 % 3. Training Options
 miniBatchSize = 1;
-numTrainingSamples = numel(dsTrain.UnderlyingDatastores{1}.Files);
 iterationsPerEpoch = floor(numTrainingSamples / miniBatchSize);
 drasticValFreq = iterationsPerEpoch * 1; 
 
 options = trainingOptions("adam", ...
-    'MaxEpochs', 3, ...
+    'MaxEpochs', 2, ... % Restored for production training
     'MiniBatchSize', miniBatchSize, ... % Small batch size for Mask R-CNN
     'InitialLearnRate', 1e-4, ...
     'ResetInputNormalization', false, ... % Required for Mask R-CNN training
@@ -40,14 +39,21 @@ options = trainingOptions("adam", ...
     'Verbose', true, ...
     'Plots', 'training-progress');
 
-% 4. Train Model
-fprintf('Starting Mask R-CNN training...\n');
-trainedMaskRCNN = trainMaskRCNN(dsTrain, maskrcnnObj, options, ...
-    'NumStrongestRegions', 100, ...
-    'NumRegionsToSample', 16);
+% 4. Resume Training from the Existing Model
+fprintf('Resuming Mask R-CNN training for production...\n');
 
-% 5. Save Model
-save('trainedMaskRCNN.mat', 'trainedMaskRCNN');
+% Ensure the previous model is loaded if not in workspace
+if ~exist('trainedMaskRCNN', 'var') && isfile('trainedMaskRCNN.mat')
+    load('trainedMaskRCNN.mat', 'trainedMaskRCNN');
+end
+
+% Resume training using the existing model and default region proposal values
+trainedMaskRCNN_final = trainMaskRCNN(dsTrain, trainedMaskRCNN, options, ...
+    'NumStrongestRegions', 1000, ...
+    'NumRegionsToSample', 128);
+
+% 5. Save Final Model
+save('trainedMaskRCNN_final.mat', 'trainedMaskRCNN_final');
 
 % 6. Basic Evaluation (Visual Check)
 fprintf('Training complete. Displaying a test sample prediction...\n');
@@ -61,21 +67,34 @@ gtBoxes = data{2};
 gtLabels = data{3};
 gtMasks = data{4};
 
-% Perform instance segmentation
-[bboxes, scores, labels, masks] = segmentObjects(trainedMaskRCNN, img);
+% Perform instance segmentation using the final model
+[bboxes, scores, labels, masks] = segmentObjects(trainedMaskRCNN_final, img);
 
 % Overlay results
 figure;
+
 subplot(1,2,1);
-imshow(img);
-showShape("rectangle", gtBoxes, 'Label', gtLabels);
+if ~isempty(gtBoxes)
+    imshow(img);
+    hold on;
+    showShape("rectangle", gtBoxes, 'Label', gtLabels);
+    hold off;
+else
+    fprintf('No ground truth objects in this test image.\n');
+    imshow(img);
+end
 title('Ground Truth');
 
 subplot(1,2,2);
-imshow(img);
 if ~isempty(bboxes)
+    imshow(img);
+    hold on;
     showShape("rectangle", bboxes, 'Label', labels);
     % Note: overlaying masks requires additional logic or insertObjectMask
+    hold off;
+else
+    fprintf('No objects were detected in this test image.\n');
+    imshow(img); % Just show the raw image
 end
 title('Prediction');
 
