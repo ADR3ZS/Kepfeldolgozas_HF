@@ -49,8 +49,8 @@ end
 
 % Resume training using the existing model and default region proposal values
 trainedMaskRCNN_final = trainMaskRCNN(dsTrain, trainedMaskRCNN, options, ...
-    'NumStrongestRegions', 1000, ...
-    'NumRegionsToSample', 128);
+    'NumStrongestRegions', 400, ...
+    'NumRegionsToSample', 64);
 
 % 5. Save Final Model
 save('trainedMaskRCNN_final.mat', 'trainedMaskRCNN_final');
@@ -60,43 +60,23 @@ fprintf('Training complete. Displaying a test sample prediction...\n');
 
 % Read the single 1-by-4 cell array from the combined datastore
 data = read(dsTest); 
-
-% Unpack the cell array into individual variables
 img = data{1};
-gtBoxes = data{2};
-gtLabels = data{3};
-gtMasks = data{4};
 
 % Perform instance segmentation using the final model
 [bboxes, scores, labels, masks] = segmentObjects(trainedMaskRCNN_final, img);
 
-% Overlay results
-figure;
-
-subplot(1,2,1);
-if ~isempty(gtBoxes)
-    imshow(img);
-    hold on;
-    showShape("rectangle", gtBoxes, 'Label', gtLabels);
-    hold off;
-else
-    fprintf('No ground truth objects in this test image.\n');
-    imshow(img);
-end
-title('Ground Truth');
-
-subplot(1,2,2);
-if ~isempty(bboxes)
-    imshow(img);
-    hold on;
-    showShape("rectangle", bboxes, 'Label', labels);
-    % Note: overlaying masks requires additional logic or insertObjectMask
-    hold off;
-else
+% Safely check if any objects were detected before drawing
+if isempty(bboxes) || size(bboxes, 1) == 0
     fprintf('No objects were detected in this test image.\n');
-    imshow(img); % Just show the raw image
+    imshow(img); % Display the raw image
+else
+    fprintf('%d objects detected. Displaying annotations...\n', size(bboxes, 1));
+    % Overlay instance masks on the image
+    imOverlay = insertObjectMask(img, masks);
+    imshow(imOverlay);
+    % Draw bounding boxes and labels
+    showShape("rectangle", bboxes, "Label", labels, "Color", "red");
 end
-title('Prediction');
 
 function data = downsampleData(data, targetSize)
     % data is a 1-by-4 cell array: {image, bbox, label, mask}
