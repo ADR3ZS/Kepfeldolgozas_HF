@@ -6,8 +6,8 @@ function data = downsampleData(data, targetSize)
     labels = data{3};
     masks = data{4};
     
-    % 1. Resize Image
-    originalSize = size(img, [1, 2]);
+    % 1. Resize Image safely
+    originalSize = [size(img, 1), size(img, 2)];
     imgResized = imresize(img, targetSize);
     
     % 2. Resize Bounding Boxes
