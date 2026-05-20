@@ -18,18 +18,27 @@ anchorBoxes = [
 maskrcnnObj = maskrcnn("resnet50-coco", classNames, anchorBoxes);
 
 % 3. Training Options
+miniBatchSize = 1;
+numTrainingSamples = numel(dsTrain.UnderlyingDatastores{1}.Files);
+iterationsPerEpoch = floor(numTrainingSamples / miniBatchSize);
+drasticValFreq = iterationsPerEpoch * 5; 
+
 options = trainingOptions("adam", ...
     'MaxEpochs', 20, ...
-    'MiniBatchSize', 1, ... % Small batch size for Mask R-CNN
+    'MiniBatchSize', miniBatchSize, ... % Small batch size for Mask R-CNN
     'InitialLearnRate', 1e-4, ...
     'ResetInputNormalization', false, ... % Required for Mask R-CNN training
+    'ValidationData', dsTest, ...
+    'ValidationFrequency', drasticValFreq, ...
     'Shuffle', 'every-epoch', ...
     'Verbose', true, ...
     'Plots', 'training-progress');
 
 % 4. Train Model
 fprintf('Starting Mask R-CNN training...\n');
-trainedMaskRCNN = trainMaskRCNN(dsTrain, maskrcnnObj, options);
+trainedMaskRCNN = trainMaskRCNN(dsTrain, maskrcnnObj, options, ...
+    'NumStrongestRegions', 100, ...
+    'NumRegionsToSample', 16);
 
 % 5. Save Model
 save('trainedMaskRCNN.mat', 'trainedMaskRCNN');
