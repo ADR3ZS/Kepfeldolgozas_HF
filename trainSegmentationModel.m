@@ -80,4 +80,49 @@ else
     showShape("rectangle", bboxes, "Label", labels, "Color", "red");
 end
 
+% 7. Quantitative Evaluation (Entire Test Set)
+fprintf('\nEvaluating model on all test images. This may take a few minutes...\n');
+
+% Reset the test datastore to start from the first image
+reset(dsTest);
+
+% The dataset was previously split into 20 test samples
+numTestImages = 20;
+
+% Initialize a table to collect the predictions as required by the evaluator
+results = table('Size', [numTestImages, 4], ...
+    'VariableTypes', {'cell', 'cell', 'cell', 'cell'}, ...
+    'VariableNames', {'Masks', 'Labels', 'Scores', 'Boxes'});
+
+% Run the network on each test image and collect outputs
+for i = 1:numTestImages
+    if hasdata(dsTest)
+        data = read(dsTest);
+        img = data{1};
+        
+        % Perform instance segmentation
+        [masks, labels, scores, bboxes] = segmentObjects(trainedMaskRCNN_final, img);
+        
+        % Store the predictions in the table
+        results.Masks{i} = masks;
+        results.Labels{i} = labels;
+        results.Scores{i} = scores;
+        results.Boxes{i} = bboxes;
+    end
+end
+
+% Reset the test datastore again so it can be used as the ground truth input
+reset(dsTest);
+
+% Evaluate the instance segmentation results against the ground truth
+metrics = evaluateInstanceSegmentation(results, dsTest);
+
+% Display the summary metrics in the Command Window
+fprintf('\n--- Final Evaluation Metrics ---\n');
+disp('Dataset Metrics:');
+disp(metrics.DataSetMetrics);
+
+disp('Class Metrics:');
+disp(metrics.ClassMetrics);
+
 
