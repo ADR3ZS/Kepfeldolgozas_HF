@@ -4,6 +4,11 @@
 % 1. Setup Datastores
 [dsTrain, dsTest] = setupSegmentationDatastores();
 
+% 1.1 Downsample Data
+targetSize = [224, 224];
+dsTrain = transform(dsTrain, @(data)downsampleData(data, targetSize));
+dsTest = transform(dsTest, @(data)downsampleData(data, targetSize));
+
 % 2. Model Configuration
 classNames = ["pig", "partial pig"];
 
@@ -21,15 +26,16 @@ maskrcnnObj = maskrcnn("resnet50-coco", classNames, anchorBoxes);
 miniBatchSize = 1;
 numTrainingSamples = numel(dsTrain.UnderlyingDatastores{1}.Files);
 iterationsPerEpoch = floor(numTrainingSamples / miniBatchSize);
-drasticValFreq = iterationsPerEpoch * 5; 
+drasticValFreq = iterationsPerEpoch * 1; 
 
 options = trainingOptions("adam", ...
-    'MaxEpochs', 20, ...
+    'MaxEpochs', 3, ...
     'MiniBatchSize', miniBatchSize, ... % Small batch size for Mask R-CNN
     'InitialLearnRate', 1e-4, ...
     'ResetInputNormalization', false, ... % Required for Mask R-CNN training
     'ValidationData', dsTest, ...
     'ValidationFrequency', drasticValFreq, ...
+    'ExecutionEnvironment', 'gpu', ... % Force GPU execution
     'Shuffle', 'every-epoch', ...
     'Verbose', true, ...
     'Plots', 'training-progress');
@@ -45,7 +51,17 @@ save('trainedMaskRCNN.mat', 'trainedMaskRCNN');
 
 % 6. Basic Evaluation (Visual Check)
 fprintf('Training complete. Displaying a test sample prediction...\n');
-[img, gtBoxes, gtLabels, gtMasks] = read(dsTest);
+
+% Read the single 1-by-4 cell array from the combined datastore
+data = read(dsTest); 
+
+% Unpack the cell array into individual variables
+img = data{1};
+gtBoxes = data{2};
+gtLabels = data{3};
+gtMasks = data{4};
+
+% Perform instance segmentation
 [bboxes, scores, labels, masks] = segmentObjects(trainedMaskRCNN, img);
 
 % Overlay results
@@ -62,3 +78,25 @@ if ~isempty(bboxes)
     % Note: overlaying masks requires additional logic or insertObjectMask
 end
 title('Prediction');
+
+function data = downsampleData(data, targetSize)
+    % data is a 1-by-4 cell array: {image, bbox, label, mask}
+    img = data{1};
+    bboxes = data{2};
+    labels = data{3};
+    masks = data{4};
+    
+    % 1. Resize Image
+    originalSize = size(img, [1, 2]);
+    imgResized = imresize(img, targetSize);
+    
+    % 2. Resize Bounding Boxes
+    scale = targetSize ./ originalSize;
+    bboxesResized = bboxresize(bboxes, scale);
+    
+    % 3. Resize Masks (must use 'nearest' to remain binary)
+    masksResized = imresize(masks, targetSize, "nearest");
+    
+    % Return the updated 1-by-4 cell array
+    data = {imgResized, bboxesResized, labels, masksResized};
+end
