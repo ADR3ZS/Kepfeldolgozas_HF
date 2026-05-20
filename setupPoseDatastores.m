@@ -1,4 +1,4 @@
-function [dsTrain, dsTest] = setupPoseDatastores()
+function [dsTrain, dsTest, numTrain] = setupPoseDatastores()
     % SETUPPOSEDATASTORES Prepare training and testing datastores for HRNet.
 
     imgDir = fullfile('data', 'pose_cropped', 'images');

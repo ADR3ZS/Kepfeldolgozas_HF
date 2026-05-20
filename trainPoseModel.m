@@ -5,7 +5,12 @@
 % preprocessPoseData(); 
 
 % 2. Setup Datastores
-[dsTrain, dsTest] = setupPoseDatastores();
+[dsTrain, dsTest, numTrainingSamples] = setupPoseDatastores();
+
+% 2.1 Implement Data Downsampling (Custom Transform)
+targetSize = [224, 224];
+dsTrain = transform(dsTrain, @(data)downsamplePoseData(data, targetSize));
+dsTest = transform(dsTest, @(data)downsamplePoseData(data, targetSize));
 
 % 3. Model Configuration
 keypointClasses = [ ...
@@ -19,12 +24,21 @@ fprintf('Initializing HRNet detector...\n');
 detector = hrnetObjectKeypointDetector("human-full-body-w32", keypointClasses);
 
 % 4. Training Options
+miniBatchSize = 1;
+iterationsPerEpoch = floor(numTrainingSamples / miniBatchSize);
+
 options = trainingOptions("adam", ...
     'MaxEpochs', 20, ...
-    'MiniBatchSize', 16, ...
-    'InitialLearnRate', 1e-3, ...
+    'MiniBatchSize', miniBatchSize, ...
+    'InitialLearnRate', 1e-5, ... % Lower learning rate for stable transfer learning
+    'GradientThreshold', 1, ...
+    'GradientThresholdMethod', 'l2norm', ...
     'BatchNormalizationStatistics', 'moving', ... % CRITICAL REQUIREMENT
-    'ResetInputNormalization', false, ... % Required for Mask R-CNN training
+    'ResetInputNormalization', false, ... 
+    'ValidationData', dsTest, ...
+    'ValidationFrequency', iterationsPerEpoch * 2, ... % Validate every 2 epochs
+    'ExecutionEnvironment', 'auto', ... % Utilize GPU with auto fallback
+    'PreprocessingEnvironment', 'background', ... % Prevent CPU from starving the GPU
     'Shuffle', 'every-epoch', ...
     'Verbose', true, ...
     'Plots', 'training-progress');
@@ -38,20 +52,50 @@ save('trainedPoseDetector.mat', 'trainedDetector');
 
 % 7. Basic Evaluation (Visual Check)
 fprintf('Training complete. Displaying a test sample prediction...\n');
-[img, gtKpts, gtBox] = read(dsTest);
-[bboxes, scores, labels, keypoints] = detect(trainedDetector, img);
 
-% Overlay results
+% Fix CombinedDatastore Read Error
+data = read(dsTest);
+img = data{1};
+gtKpts = data{2};
+gtBox = data{3};
+
+% Correct HRNet inference syntax
+[keypoints, keypointScores] = detect(trainedDetector, img, gtBox);
+
+% Visualize
 figure;
-imshow(img);
-hold on;
 if ~isempty(keypoints)
-    % Plot predicted keypoints
-    plot(keypoints{1}(:,1), keypoints{1}(:,2), 'r*', 'MarkerSize', 10);
-    % Plot bounding box
-    rectangle('Position', bboxes(1,:), 'EdgeColor', 'r', 'LineWidth', 2);
+    % Insert keypoints and the bounding box
+    imgOut = insertObjectKeypoints(img, keypoints, "KeypointColor", "red");
+    imgOut = insertShape(imgOut, "rectangle", gtBox, "Color", "blue", "LineWidth", 3);
+    imshow(imgOut);
+    title('HRNet Pose Estimation Results');
+else
+    fprintf('No keypoints were detected in this test image.\n');
+    imshow(img);
 end
-title('Prediction (Red) vs Ground Truth (Blue)');
-% Plot GT keypoints in blue for comparison
-plot(gtKpts(:,1), gtKpts(:,2), 'b+', 'MarkerSize', 10);
-hold off;
+
+function data = downsamplePoseData(data, targetSize)
+    % data is a 1-by-3 cell array: {image, keypoints, bbox}
+    img = data{1}; 
+    kpts = data{2}; 
+    bbox = data{3};
+    originalSize = size(img, [1, 2]);
+    
+    % 1. Resize Image
+    imgResized = imresize(img, targetSize);
+    
+    % 2. Calculate scales
+    scaleY = targetSize(1) / originalSize(1);
+    scaleX = targetSize(2) / originalSize(2);
+    
+    % 3. Resize Bounding Box
+    bboxResized = bboxresize(bbox, [scaleY, scaleX]);
+    
+    % 4. Resize Keypoints (Scale X and Y only)
+    kptsResized = kpts;
+    kptsResized(:,1) = kpts(:,1) * scaleX;
+    kptsResized(:,2) = kpts(:,2) * scaleY;
+    
+    data = {imgResized, kptsResized, bboxResized};
+end
