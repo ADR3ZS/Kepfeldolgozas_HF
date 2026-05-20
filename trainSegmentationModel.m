@@ -111,11 +111,18 @@ for i = 1:numTestImages
     end
 end
 
-% Reset the test datastore again so it can be used as the ground truth input
+% Reset the test datastore again
 reset(dsTest);
 
+% 1. Convert the predictions table into an arrayDatastore (Masks, Labels, Scores only)
+resultsDS = arrayDatastore(results(:, {'Masks', 'Labels', 'Scores'}));
+
+% 2. Transform the ground truth datastore to strictly return {masks, labels}
+% data{4} contains the ground truth masks, data{3} contains the ground truth labels
+dsTruth = transform(dsTest, @(data) {data{4}, data{3}});
+
 % Evaluate the instance segmentation results against the ground truth
-metrics = evaluateInstanceSegmentation(results, dsTest);
+metrics = evaluateInstanceSegmentation(resultsDS, dsTruth);
 
 % Display the summary metrics in the Command Window
 fprintf('\n--- Final Evaluation Metrics ---\n');
