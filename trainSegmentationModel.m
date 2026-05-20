@@ -80,7 +80,7 @@ else
     showShape("rectangle", bboxes, "Label", labels, "Color", "red");
 end
 
-% 7. Quantitative Evaluation (Entire Test Set)
+% 7. Quantitative Evaluation (Entire Test Set)gem
 fprintf('\nEvaluating model on all test images. This may take a few minutes...\n');
 
 % Reset the test datastore to start from the first image
@@ -121,15 +121,19 @@ resultsDS = arrayDatastore(results(:, {'Masks', 'Labels', 'Scores'}));
 % data{4} contains the ground truth masks, data{3} contains the ground truth labels
 dsTruth = transform(dsTest, @(data) {data{4}, data{3}});
 
-% Evaluate the instance segmentation results against the ground truth
+% 3. Evaluate the instance segmentation results against the ground truth
 metrics = evaluateInstanceSegmentation(resultsDS, dsTruth);
 
-% Display the summary metrics in the Command Window
+% 4. Display the summary metrics in the Command Window
 fprintf('\n--- Final Evaluation Metrics ---\n');
 disp('Dataset Metrics:');
 disp(metrics.DataSetMetrics);
 
 disp('Class Metrics:');
+disp(metrics.ClassMetrics);
+
+
+'Class Metrics:');
 disp(metrics.ClassMetrics);
 
 
